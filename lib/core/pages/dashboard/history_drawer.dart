@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:indonesia_law/core/models/app_user.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
 
-/// Side panel listing the saved conversations.
+/// Side panel listing the saved conversations, with the signed-in account at
+/// the bottom.
 class HistoryDrawer extends StatelessWidget {
   const HistoryDrawer({
     super.key,
@@ -12,6 +14,8 @@ class HistoryDrawer extends StatelessWidget {
     required this.onDelete,
     required this.onNewChat,
     required this.onClearAll,
+    required this.user,
+    required this.onSignOut,
   });
 
   static const _background = Color(0xFF0B0B0B);
@@ -24,6 +28,10 @@ class HistoryDrawer extends StatelessWidget {
   final ValueChanged<ChatSession> onDelete;
   final VoidCallback onNewChat;
   final VoidCallback onClearAll;
+
+  /// Signed-in account. Null only in the brief moment after signing out.
+  final AppUser? user;
+  final VoidCallback onSignOut;
 
   @override
   Widget build(BuildContext context) {
@@ -47,6 +55,7 @@ class HistoryDrawer extends StatelessWidget {
               child: _NewChatButton(onTap: onNewChat),
             ),
             Expanded(child: _body()),
+            if (user != null) _AccountTile(user: user!, onSignOut: onSignOut),
           ],
         ),
       ),
@@ -155,6 +164,114 @@ class _NewChatButton extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Signed-in account, pinned to the bottom of the drawer.
+class _AccountTile extends StatelessWidget {
+  const _AccountTile({required this.user, required this.onSignOut});
+
+  final AppUser user;
+  final VoidCallback onSignOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(16, 12, 8, 12),
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: Color(0x1AFFFFFF))),
+      ),
+      child: Row(
+        children: [
+          _Avatar(user: user),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  user.displayName,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.92),
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  user.email,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.42),
+                    fontSize: 12.5,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            onPressed: onSignOut,
+            tooltip: 'Keluar',
+            icon: const Icon(Icons.logout_rounded, size: 19),
+            color: Colors.white.withValues(alpha: 0.7),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Google profile picture, falling back to the first letter of the name.
+class _Avatar extends StatelessWidget {
+  const _Avatar({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final photoUrl = user.photoUrl;
+    return Container(
+      width: 38,
+      height: 38,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white.withValues(alpha: 0.08),
+        border: Border.all(color: const Color(0x26FFFFFF)),
+      ),
+      child: photoUrl == null
+          ? _Initial(user: user)
+          : Image.network(
+              photoUrl,
+              fit: BoxFit.cover,
+              // A missing picture must not leave a hole in the drawer.
+              errorBuilder: (_, _, _) => _Initial(user: user),
+            ),
+    );
+  }
+}
+
+class _Initial extends StatelessWidget {
+  const _Initial({required this.user});
+
+  final AppUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text(
+        user.initial,
+        style: TextStyle(
+          color: Colors.white.withValues(alpha: 0.85),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
         ),
       ),
     );

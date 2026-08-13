@@ -7,11 +7,17 @@ import 'package:indonesia_law/core/models/chat_message.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
 import 'package:indonesia_law/core/pages/dashboard/chat_controller.dart';
 import 'package:indonesia_law/core/pages/dashboard/history_drawer.dart';
+import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
 import 'package:indonesia_law/core/widgets/rich_answer_text.dart';
+import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
 
 /// Chat-style landing page for the assistant, matching `dashboard_chat.png`.
+///
+/// Only reachable once [auth] holds a signed-in account; see `AuthGate`.
 class DashboardView extends StatefulWidget {
-  const DashboardView({super.key});
+  const DashboardView({super.key, required this.auth});
+
+  final AuthController auth;
 
   @override
   State<DashboardView> createState() => _DashboardViewState();
@@ -142,6 +148,39 @@ class _DashboardViewState extends State<DashboardView> {
     await _chat.clearHistory();
   }
 
+  Future<void> _confirmSignOut() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: _surface,
+        title: const Text('Keluar dari akun?'),
+        content: const Text(
+          'Anda perlu masuk kembali dengan Google untuk melanjutkan obrolan. '
+          'Riwayat yang tersimpan di perangkat ini tidak dihapus.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(
+              foregroundColor: const Color(0xFFFF8A8A),
+            ),
+            child: const Text('Keluar'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    // Saves the open transcript first — signing out swaps this page for the
+    // sign-in one and disposes the controller.
+    await _chat.startNewChat();
+    await widget.auth.signOut();
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -155,6 +194,8 @@ class _DashboardViewState extends State<DashboardView> {
           sessions: _chat.sessions,
           activeId: _chat.activeSessionId,
           isLoading: _chat.isLoadingHistory,
+          user: widget.auth.user,
+          onSignOut: _confirmSignOut,
           onOpen: _openSession,
           onDelete: (session) => _chat.deleteSession(session.id),
           onNewChat: () {
@@ -272,7 +313,7 @@ class _EmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        const Positioned.fill(child: _SpotlightBackdrop()),
+        const Positioned.fill(child: SpotlightBackdrop()),
         Center(
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -306,52 +347,6 @@ class _EmptyState extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Two soft light cones falling from the top of the screen.
-class _SpotlightBackdrop extends StatelessWidget {
-  const _SpotlightBackdrop();
-
-  @override
-  Widget build(BuildContext context) {
-    return IgnorePointer(
-      child: ClipRect(
-        child: Stack(
-          children: const [
-            _Spotlight(alignment: Alignment(-0.5, -1.6)),
-            _Spotlight(alignment: Alignment(0.5, -1.6)),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _Spotlight extends StatelessWidget {
-  const _Spotlight({required this.alignment});
-
-  final Alignment alignment;
-
-  @override
-  Widget build(BuildContext context) {
-    return Align(
-      alignment: alignment,
-      child: Container(
-        width: 320,
-        height: 420,
-        decoration: BoxDecoration(
-          gradient: RadialGradient(
-            colors: [
-              Colors.white.withValues(alpha: 0.18),
-              Colors.white.withValues(alpha: 0.05),
-              Colors.transparent,
-            ],
-            stops: const [0.0, 0.45, 1.0],
-          ),
-        ),
-      ),
     );
   }
 }
