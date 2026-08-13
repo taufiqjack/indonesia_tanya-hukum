@@ -2,12 +2,12 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:indonesia_law/core/components/toast.dart';
 import 'package:indonesia_law/core/models/chat_message.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
 import 'package:indonesia_law/core/pages/dashboard/chat_controller.dart';
 import 'package:indonesia_law/core/pages/dashboard/history_drawer.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
+import 'package:indonesia_law/core/widgets/common_handle_back.dart';
 import 'package:indonesia_law/core/widgets/rich_answer_text.dart';
 import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
 
@@ -29,15 +29,12 @@ class _DashboardViewState extends State<DashboardView> {
   static const _border = Color(0x1AFFFFFF);
 
   /// Back has to be pressed twice within this window to leave the app.
-  static const _exitWindow = Duration(seconds: 2);
 
   final ChatController _chat = ChatController();
   final TextEditingController _promptController = TextEditingController();
   final FocusNode _promptFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-
-  DateTime? _lastBackPressedAt;
 
   @override
   void initState() {
@@ -67,28 +64,6 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// First back press only warns; a second one within [_exitWindow] closes the
   /// app. Runs on Android — other platforms never deliver the pop.
-  void _handleBack(bool didPop) {
-    if (didPop) return;
-
-    // `canPop: false` swallows the pop the drawer would normally consume, so
-    // close it here instead of warning about exit.
-    final scaffold = _scaffoldKey.currentState;
-    if (scaffold != null && scaffold.isDrawerOpen) {
-      scaffold.closeDrawer();
-      return;
-    }
-
-    final now = DateTime.now();
-    final last = _lastBackPressedAt;
-    if (last != null && now.difference(last) < _exitWindow) {
-      SystemNavigator.pop();
-      exit(0);
-    }
-
-    _lastBackPressedAt = now;
-    _promptFocusNode.unfocus();
-    toast(context, 'Tekan sekali lagi untuk keluar');
-  }
 
   void _scrollToBottom() {
     if (!_scrollController.hasClients) return;
@@ -207,7 +182,7 @@ class _DashboardViewState extends State<DashboardView> {
       ),
       body: PopScope(
         canPop: false,
-        onPopInvokedWithResult: (didPop, result) => _handleBack(didPop),
+        onPopInvokedWithResult: (didPop, result) => handleBack(context, didPop),
         child: SafeArea(
           child: ListenableBuilder(
             listenable: _chat,

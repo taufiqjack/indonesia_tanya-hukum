@@ -1,10 +1,7 @@
-import 'dart:convert';
-
 import 'package:flutter/foundation.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:indonesia_law/core/config/env.dart';
 import 'package:indonesia_law/core/models/app_user.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 
 /// Raised when signing in fails; carries a message meant to be shown to the
 /// user as-is.
@@ -25,10 +22,6 @@ abstract class AuthService {
   /// Prepares the underlying SDK. Must complete before anything else is called.
   Future<void> initialize();
 
-  /// Returns the previous session without showing any UI, or null when there is
-  /// none to restore.
-  Future<AppUser?> restore();
-
   /// Runs the interactive sign-in flow. Returns null when the user backs out.
   Future<AppUser?> signIn();
 
@@ -37,22 +30,12 @@ abstract class AuthService {
 
 /// Google Sign-In on top of the `google_sign_in` plugin.
 ///
-/// The account is also cached in `SharedPreferences`: the silent flow needs the
-/// network and a platform credential store, so the cache is what keeps the user
-/// signed in after a relaunch on a plane or a flaky connection.
+/// Nothing is restored on launch: the account is only resolved once the user
+/// taps the sign-in button, so the app never signs anyone in on its own.
 class GoogleAuthService implements AuthService {
-  /// [_preferences] is only passed in by tests; production resolves it lazily.
-  GoogleAuthService([this._preferences]);
-
-  static const _key = 'auth_user_v1';
-
-  SharedPreferences? _preferences;
   Future<void>? _initialization;
 
   GoogleSignIn get _google => GoogleSignIn.instance;
-
-  Future<SharedPreferences> get _prefs async =>
-      _preferences ??= await SharedPreferences.getInstance();
 
   /// `GoogleSignIn.initialize` may only run once per process, so the first
   /// call's future is reused.
@@ -67,30 +50,6 @@ class GoogleAuthService implements AuthService {
   }
 
   @override
-  Future<AppUser?> restore() async {
-    await initialize();
-    final cached = await _cachedUser();
-
-    final attempt = _google.attemptLightweightAuthentication();
-    // Null means the platform (web FedCM) only reports through its event
-    // stream, so there is nothing to wait for here.
-    if (attempt == null) return cached;
-
-    try {
-      final account = await attempt;
-      if (account == null) return cached;
-      final user = _toUser(account);
-      await _cache(user);
-      return user;
-    } on Object catch (error) {
-      // A silent attempt failing is not worth an error screen — fall back to
-      // the cached session, if any.
-      debugPrint('Gagal memulihkan sesi Google: $error');
-      return cached;
-    }
-  }
-
-  @override
   Future<AppUser?> signIn() async {
     await initialize();
 
@@ -101,9 +60,7 @@ class GoogleAuthService implements AuthService {
     }
 
     try {
-      final user = _toUser(await _google.authenticate());
-      await _cache(user);
-      return user;
+      return _toUser(await _google.authenticate());
     } on GoogleSignInException catch (error) {
       if (error.code == GoogleSignInExceptionCode.canceled) return null;
       // The user-facing text is deliberately short, so the code and the
@@ -125,37 +82,13 @@ class GoogleAuthService implements AuthService {
 
   @override
   Future<void> signOut() async {
-    // The local session is dropped first: even if the SDK call fails, the app
-    // must not keep showing the chat as signed in.
-    final prefs = await _prefs;
-    await prefs.remove(_key);
+    // The controller drops the account regardless, so a failing SDK call must
+    // not keep the app showing the chat as signed in.
     try {
       await _google.signOut();
     } on Object catch (error) {
       debugPrint('Gagal keluar dari Google: $error');
     }
-  }
-
-  Future<AppUser?> _cachedUser() async {
-    final prefs = await _prefs;
-    final raw = prefs.getString(_key);
-    if (raw == null || raw.isEmpty) return null;
-
-    try {
-      final decoded = jsonDecode(raw);
-      if (decoded is! Map<String, Object?>) return null;
-      final user = AppUser.fromJson(decoded);
-      return user.id.isEmpty ? null : user;
-    } on FormatException catch (error) {
-      debugPrint('Sesi tersimpan rusak, dibuang: $error');
-      await prefs.remove(_key);
-      return null;
-    }
-  }
-
-  Future<void> _cache(AppUser user) async {
-    final prefs = await _prefs;
-    await prefs.setString(_key, jsonEncode(user.toJson()));
   }
 
   AppUser _toUser(GoogleSignInAccount account) => AppUser(

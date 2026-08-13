@@ -19,9 +19,9 @@ const _user = AppUser(
   name: 'Budi Santoso',
 );
 
-/// Stands in for Google Sign-In: [session] is what a successful sign-in or
-/// restore returns, [failure] turns sign-in into an error, and neither one set
-/// means the user backed out of the flow.
+/// Stands in for Google Sign-In: [session] is what a successful sign-in
+/// returns, [failure] turns sign-in into an error, and neither one set means
+/// the user backed out of the flow.
 class FakeAuthService implements AuthService {
   FakeAuthService({this.session, this.failure});
 
@@ -31,9 +31,6 @@ class FakeAuthService implements AuthService {
 
   @override
   Future<void> initialize() async {}
-
-  @override
-  Future<AppUser?> restore() async => session;
 
   @override
   Future<AppUser?> signIn() async {
@@ -55,7 +52,7 @@ void main() {
   testWidgets('dashboard opens on the empty state', (tester) async {
     final auth = AuthController(service: FakeAuthService(session: _user));
     addTearDown(auth.dispose);
-    await auth.restore();
+    await auth.signIn();
 
     await tester.pumpWidget(MaterialApp(home: DashboardView(auth: auth)));
 
@@ -95,13 +92,14 @@ void main() {
     expect(find.byIcon(Icons.error_outline_rounded), findsNothing);
   });
 
-  test('restoring a session, then signing out, flips the gate', () async {
+  test('signing in, then signing out, flips the gate', () async {
     final service = FakeAuthService(session: _user);
     final auth = AuthController(service: service);
     addTearDown(auth.dispose);
 
-    await auth.restore();
-    expect(auth.isRestoring, isFalse);
+    expect(auth.isSignedIn, isFalse);
+
+    await auth.signIn();
     expect(auth.user?.email, 'budi@example.com');
 
     await auth.signOut();

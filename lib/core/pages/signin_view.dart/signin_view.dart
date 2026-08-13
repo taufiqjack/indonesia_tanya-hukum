@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
+import 'package:indonesia_law/core/widgets/common_handle_back.dart';
 import 'package:indonesia_law/core/widgets/google_logo.dart';
 import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
 
@@ -18,45 +19,49 @@ class SigninView extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: background,
-      body: Stack(
-        children: [
-          const Positioned.fill(child: SpotlightBackdrop()),
-          SafeArea(
-            child: ListenableBuilder(
-              listenable: auth,
-              builder: (context, _) {
-                return Column(
-                  children: [
-                    const Spacer(flex: 3),
-                    const _Brand(),
-                    const Spacer(flex: 2),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 24),
-                      child: Column(
-                        children: [
-                          if (auth.error != null) ...[
-                            _ErrorBanner(
-                              message: auth.error!,
-                              onDismiss: auth.clearError,
+      body: PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, result) => handleBack(context, didPop),
+        child: Stack(
+          children: [
+            const Positioned.fill(child: SpotlightBackdrop()),
+            SafeArea(
+              child: ListenableBuilder(
+                listenable: auth,
+                builder: (context, _) {
+                  return Column(
+                    children: [
+                      const Spacer(flex: 3),
+                      const _Brand(),
+                      const Spacer(flex: 2),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 24),
+                        child: Column(
+                          children: [
+                            if (auth.error != null) ...[
+                              _ErrorBanner(
+                                message: auth.error!,
+                                onDismiss: auth.clearError,
+                              ),
+                              const SizedBox(height: 14),
+                            ],
+                            _GoogleButton(
+                              isBusy: auth.isBusy,
+                              onPressed: auth.signIn,
                             ),
-                            const SizedBox(height: 14),
+                            const SizedBox(height: 18),
+                            const _Disclaimer(),
                           ],
-                          _GoogleButton(
-                            isBusy: auth.isBusy,
-                            onPressed: auth.signIn,
-                          ),
-                          const SizedBox(height: 18),
-                          const _Disclaimer(),
-                        ],
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 28),
-                  ],
-                );
-              },
+                      const SizedBox(height: 28),
+                    ],
+                  );
+                },
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
