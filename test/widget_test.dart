@@ -12,6 +12,8 @@ import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/signin_view.dart';
 import 'package:indonesia_law/core/services/auth_service.dart';
 import 'package:indonesia_law/core/services/gemini_service.dart';
+import 'package:indonesia_law/core/services/session_store.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 const _user = AppUser(
   id: 'user-1',
@@ -28,12 +30,14 @@ class FakeAuthService implements AuthService {
   final AppUser? session;
   final String? failure;
   bool signedOut = false;
+  bool signInCalled = false;
 
   @override
   Future<void> initialize() async {}
 
   @override
   Future<AppUser?> signIn() async {
+    signInCalled = true;
     if (failure != null) throw AuthException(failure!);
     return session;
   }
@@ -47,6 +51,8 @@ void main() {
     dotenv.loadFromString(
       envString: 'GEMINI_API_KEY=test-key\nGEMINI_MODEL=gemini-3.5-flash',
     );
+    // Backs LocalSessionStore and the chat history in every test.
+    SharedPreferences.setMockInitialValues({});
   });
 
   testWidgets('dashboard opens on the empty state', (tester) async {
@@ -105,6 +111,51 @@ void main() {
     await auth.signOut();
     expect(auth.isSignedIn, isFalse);
     expect(service.signedOut, isTrue);
+  });
+
+  testWidgets('the session outlives a restart, and sign-out ends it', (
+    tester,
+  ) async {
+    final store = LocalSessionStore();
+
+    final first = AuthController(
+      service: FakeAuthService(session: _user),
+      store: store,
+    );
+    addTearDown(first.dispose);
+    await first.signIn();
+
+    // A fresh controller stands in for the next launch: same device, same
+    // store, nothing typed by the user.
+    final second = AuthController(service: FakeAuthService(), store: store);
+    addTearDown(second.dispose);
+    expect(second.isRestoring, isTrue);
+    await second.restore();
+
+    expect(second.isRestoring, isFalse);
+    expect(second.isSignedIn, isTrue);
+    expect(second.user?.email, 'budi@example.com');
+
+    await second.signOut();
+
+    final third = AuthController(service: FakeAuthService(), store: store);
+    addTearDown(third.dispose);
+    await third.restore();
+    expect(third.isSignedIn, isFalse);
+  });
+
+  test('restoring never touches Google, so no account sheet can appear', () async {
+    // The saved account is the whole answer; asking the SDK anything on launch
+    // is what put a bottom sheet over the chat.
+    final service = FakeAuthService(session: _user);
+    final auth = AuthController(service: service, store: LocalSessionStore());
+    addTearDown(auth.dispose);
+
+    await auth.restore();
+
+    expect(service.signInCalled, isFalse);
+    expect(auth.isSignedIn, isFalse);
+    expect(auth.isRestoring, isFalse);
   });
 
   testWidgets('typing a question and sending it shows both bubbles', (

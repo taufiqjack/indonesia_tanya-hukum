@@ -28,6 +28,14 @@ class _MyAppState extends State<MyApp> {
   final AuthController _auth = AuthController();
 
   @override
+  void initState() {
+    super.initState();
+    // Picks up the session left by an earlier run; the gate shows a splash
+    // until this answers.
+    _auth.restore();
+  }
+
+  @override
   void dispose() {
     _auth.dispose();
     super.dispose();

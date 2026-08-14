@@ -30,8 +30,10 @@ abstract class AuthService {
 
 /// Google Sign-In on top of the `google_sign_in` plugin.
 ///
-/// Nothing is restored on launch: the account is only resolved once the user
-/// taps the sign-in button, so the app never signs anyone in on its own.
+/// The SDK is only ever reached through the sign-in button. Nothing is resolved
+/// on launch — not even silently, since Android's Credential Manager answers a
+/// lightweight attempt with an account sheet — so a session that outlives the
+/// app is remembered by the app itself, not asked for again here.
 class GoogleAuthService implements AuthService {
   Future<void>? _initialization;
 

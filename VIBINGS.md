@@ -4,3 +4,6 @@
 4. please add history chat in dashboard using endpoint or local storage
 5. please write signin_view set to login with google using same theme in dashboard, required chat login first
 6. cannot signin google, please fix
+
+7. if already signin with google, after close app sign in again. please fix session
+8. disable bottom alert restore when already signin google in dashboard
