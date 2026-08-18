@@ -20,7 +20,14 @@ class ChatSession {
         .where((message) => message.isUser && message.text.trim().isNotEmpty)
         .map((message) => message.text.trim())
         .firstOrNull;
-    if (first == null) return 'Obrolan baru';
+    if (first == null) {
+      // A question can be attachments only; name it after the first one.
+      final attached = messages
+          .where((message) => message.isUser && message.hasAttachments)
+          .map((message) => message.attachments.first.name)
+          .firstOrNull;
+      return attached ?? 'Obrolan baru';
+    }
 
     final singleLine = first.replaceAll(RegExp(r'\s+'), ' ');
     return singleLine.length <= 60

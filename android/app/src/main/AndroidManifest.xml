@@ -1,6 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Required to reach the Gemini API. -->
     <uses-permission android:name="android.permission.INTERNET"/>
+    <!-- Attachments can be photographed, but a device without a camera can
+         still pick from the gallery or the file picker. -->
+    <uses-feature android:name="android.hardware.camera" android:required="false"/>
     <application
         android:label="Tanya Hukum"
         android:name="${applicationName}"

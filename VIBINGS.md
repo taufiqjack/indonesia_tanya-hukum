@@ -7,3 +7,4 @@
 
 7. if already signin with google, after close app sign in again. please fix session
 8. disable bottom alert restore when already signin google in dashboard
+9. enable upload file or image photo in chat 

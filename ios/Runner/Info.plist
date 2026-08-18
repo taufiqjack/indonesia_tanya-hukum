@@ -14,6 +14,10 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Kamera dipakai untuk memotret dokumen yang ingin Anda tanyakan.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Galeri dipakai untuk melampirkan foto dokumen ke pertanyaan Anda.</string>
 	<key>CFBundleName</key>
 	<string>indonesia_law</string>
 	<key>CFBundlePackageType</key>

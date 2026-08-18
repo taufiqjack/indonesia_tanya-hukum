@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:indonesia_law/core/models/chat_attachment.dart';
 import 'package:indonesia_law/core/models/chat_message.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
 import 'package:indonesia_law/core/services/chat_history_store.dart';
@@ -53,21 +54,41 @@ class ChatController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Sends [text] and streams the answer into the last message.
-  Future<void> send(String text) async {
-    final prompt = text.trim();
-    if (prompt.isEmpty || _isSending) return;
+  /// Question used when the composer only carries attachments, so Gemini still
+  /// gets an instruction to go with the file.
+  static const attachmentOnlyPrompt =
+      'Tolong baca lampiran ini dan jelaskan isinya dari sisi hukum '
+      'yang berlaku di Indonesia.';
 
+  /// Sends [text] plus any [attachments], streaming the answer into the last
+  /// message. Either the text or an attachment is enough to send.
+  Future<void> send(
+    String text, {
+    List<ChatAttachment> attachments = const <ChatAttachment>[],
+  }) async {
+    final typed = text.trim();
+    if ((typed.isEmpty && attachments.isEmpty) || _isSending) return;
+
+    final prompt = typed.isEmpty ? attachmentOnlyPrompt : typed;
     final history = List<ChatMessage>.unmodifiable(_messages);
     _messages
-      ..add(ChatMessage.user(prompt))
+      ..add(
+        ChatMessage.user(
+          typed,
+          attachments: List<ChatAttachment>.unmodifiable(attachments),
+        ),
+      )
       ..add(const ChatMessage.model('', isStreaming: true));
     _isSending = true;
     notifyListeners();
 
     final completer = Completer<void>();
     _subscription = _service
-        .streamAnswer(prompt: prompt, history: history)
+        .streamAnswer(
+          prompt: prompt,
+          history: history,
+          attachments: attachments,
+        )
         .listen(
           (answer) =>
               _replaceLast(ChatMessage.model(answer, isStreaming: true)),
@@ -188,10 +209,10 @@ class ChatController extends ChangeNotifier {
     final lastUser = _messages.lastIndexWhere((message) => message.isUser);
     if (lastUser < 0) return;
 
-    final prompt = _messages[lastUser].text;
+    final question = _messages[lastUser];
     _messages.removeRange(lastUser, _messages.length);
     notifyListeners();
-    await send(prompt);
+    await send(question.text, attachments: question.attachments);
   }
 
   /// Writes the open transcript into the history store, creating its session

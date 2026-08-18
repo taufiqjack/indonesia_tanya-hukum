@@ -1,12 +1,13 @@
-import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:indonesia_law/core/models/chat_attachment.dart';
 import 'package:indonesia_law/core/models/chat_message.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
 import 'package:indonesia_law/core/pages/dashboard/chat_controller.dart';
 import 'package:indonesia_law/core/pages/dashboard/history_drawer.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
+import 'package:indonesia_law/core/services/attachment_picker.dart';
+import 'package:indonesia_law/core/widgets/attachment_tile.dart';
 import 'package:indonesia_law/core/widgets/common_handle_back.dart';
 import 'package:indonesia_law/core/widgets/rich_answer_text.dart';
 import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
@@ -30,11 +31,19 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// Back has to be pressed twice within this window to leave the app.
 
+  /// Attachments cannot outnumber this on one question — the request carries
+  /// them inline, so a handful is already a large upload.
+  static const _maxAttachments = 4;
+
   final ChatController _chat = ChatController();
+  final AttachmentPicker _picker = AttachmentPicker();
   final TextEditingController _promptController = TextEditingController();
   final FocusNode _promptFocusNode = FocusNode();
   final ScrollController _scrollController = ScrollController();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
+
+  /// Picked but not yet sent.
+  final List<ChatAttachment> _pending = <ChatAttachment>[];
 
   @override
   void initState() {
@@ -55,11 +64,57 @@ class _DashboardViewState extends State<DashboardView> {
 
   void _submit([String? text]) {
     final prompt = text ?? _promptController.text;
-    if (prompt.trim().isEmpty || _chat.isSending) return;
+    if (_chat.isSending) return;
+    if (prompt.trim().isEmpty && _pending.isEmpty) return;
 
+    final attachments = List<ChatAttachment>.of(_pending);
     _promptController.clear();
     _promptFocusNode.unfocus();
-    _chat.send(prompt);
+    setState(_pending.clear);
+    _chat.send(prompt, attachments: attachments);
+  }
+
+  /// Asks where the file comes from, then adds it to the composer.
+  Future<void> _attach() async {
+    if (_pending.length >= _maxAttachments) {
+      _notify('Maksimal $_maxAttachments lampiran per pertanyaan.');
+      return;
+    }
+
+    _promptFocusNode.unfocus();
+    final source = await showModalBottomSheet<AttachmentSource>(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => const _AttachmentSheet(),
+    );
+    if (source == null || !mounted) return;
+
+    try {
+      final attachment = await _picker.pick(source);
+      if (attachment == null || !mounted) return;
+      setState(() => _pending.add(attachment));
+    } on AttachmentException catch (error) {
+      _notify(error.message);
+    }
+  }
+
+  void _removeAttachment(ChatAttachment attachment) {
+    setState(() => _pending.remove(attachment));
+  }
+
+  void _notify(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 3),
+        ),
+      );
   }
 
   /// First back press only warns; a second one within [_exitWindow] closes the
@@ -81,6 +136,7 @@ class _DashboardViewState extends State<DashboardView> {
   Future<void> _newChat() async {
     _promptController.clear();
     _promptFocusNode.unfocus();
+    setState(_pending.clear);
     await _chat.startNewChat();
   }
 
@@ -88,6 +144,7 @@ class _DashboardViewState extends State<DashboardView> {
     _scaffoldKey.currentState?.closeDrawer();
     _promptController.clear();
     _promptFocusNode.unfocus();
+    setState(_pending.clear);
     await _chat.openSession(session);
     _scrollToBottom();
   }
@@ -214,6 +271,9 @@ class _DashboardViewState extends State<DashboardView> {
                       isSending: _chat.isSending,
                       onSend: _submit,
                       onStop: _chat.stop,
+                      attachments: _pending,
+                      onAttach: _attach,
+                      onRemoveAttachment: _removeAttachment,
                     ),
                   ),
                 ],
@@ -384,13 +444,22 @@ class _MessageBubble extends StatelessWidget {
               ),
               border: Border.all(color: const Color(0x1AFFFFFF)),
             ),
-            child: Text(
-              message.text,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                height: 1.45,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (message.hasAttachments)
+                  _SentAttachments(attachments: message.attachments),
+                if (message.text.trim().isNotEmpty)
+                  Text(
+                    message.text,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 15,
+                      height: 1.45,
+                    ),
+                  ),
+              ],
             ),
           ),
         ),
@@ -457,6 +526,45 @@ class _MessageBubble extends StatelessWidget {
           ),
         ),
       ],
+    );
+  }
+}
+
+/// Attachments as they appear inside a question already sent: photos keep
+/// their preview, other files fall back to a name row.
+class _SentAttachments extends StatelessWidget {
+  const _SentAttachments({required this.attachments});
+
+  final List<ChatAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    final thumbnails = attachments.where((a) => a.isImage && a.bytes != null);
+    final rows = attachments.where((a) => !(a.isImage && a.bytes != null));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (thumbnails.isNotEmpty)
+            Wrap(
+              alignment: WrapAlignment.end,
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                for (final attachment in thumbnails)
+                  AttachmentThumbnail(attachment: attachment, size: 108),
+              ],
+            ),
+          for (final attachment in rows)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: AttachmentNameRow(attachment: attachment),
+            ),
+        ],
+      ),
     );
   }
 }
@@ -649,6 +757,9 @@ class _PromptComposer extends StatelessWidget {
     required this.isSending,
     required this.onSend,
     required this.onStop,
+    required this.attachments,
+    required this.onAttach,
+    required this.onRemoveAttachment,
   });
 
   final TextEditingController controller;
@@ -658,6 +769,11 @@ class _PromptComposer extends StatelessWidget {
   final bool isSending;
   final VoidCallback onSend;
   final VoidCallback onStop;
+
+  /// Picked but not yet sent; rendered as removable thumbnails on top.
+  final List<ChatAttachment> attachments;
+  final VoidCallback onAttach;
+  final ValueChanged<ChatAttachment> onRemoveAttachment;
 
   @override
   Widget build(BuildContext context) {
@@ -670,6 +786,11 @@ class _PromptComposer extends StatelessWidget {
       ),
       child: Column(
         children: [
+          if (attachments.isNotEmpty)
+            _PendingAttachments(
+              attachments: attachments,
+              onRemove: onRemoveAttachment,
+            ),
           TextField(
             controller: controller,
             focusNode: focusNode,
@@ -692,9 +813,10 @@ class _PromptComposer extends StatelessWidget {
           const SizedBox(height: 8),
           Row(
             children: [
-              const _CircleButton(
+              _CircleButton(
                 icon: Icons.attach_file_rounded,
                 tooltip: 'Lampirkan berkas',
+                onTap: onAttach,
               ),
               const SizedBox(width: 8),
               const _CircleButton(
@@ -725,10 +847,13 @@ class _PromptComposer extends StatelessWidget {
 }
 
 class _CircleButton extends StatelessWidget {
-  const _CircleButton({required this.icon, required this.tooltip});
+  const _CircleButton({required this.icon, required this.tooltip, this.onTap});
 
   final IconData icon;
   final String tooltip;
+
+  /// Null for the buttons that are still decorative.
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -739,7 +864,7 @@ class _CircleButton extends StatelessWidget {
         shape: const CircleBorder(side: BorderSide(color: Color(0x26FFFFFF))),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {},
+          onTap: onTap ?? () {},
           child: SizedBox(
             width: 40,
             height: 40,
@@ -750,6 +875,109 @@ class _CircleButton extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Row of thumbnails sitting above the text field, one per picked file.
+class _PendingAttachments extends StatelessWidget {
+  const _PendingAttachments({required this.attachments, required this.onRemove});
+
+  final List<ChatAttachment> attachments;
+  final ValueChanged<ChatAttachment> onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      // Room on top for the remove badge, which overhangs the thumbnail.
+      padding: const EdgeInsets.only(top: 10, bottom: 4, right: 4),
+      child: SizedBox(
+        height: 76,
+        child: ListView.separated(
+          scrollDirection: Axis.horizontal,
+          padding: const EdgeInsets.only(top: 4),
+          itemCount: attachments.length,
+          separatorBuilder: (_, _) => const SizedBox(width: 10),
+          itemBuilder: (context, index) {
+            final attachment = attachments[index];
+            return AttachmentThumbnail(
+              attachment: attachment,
+              onRemove: () => onRemove(attachment),
+            );
+          },
+        ),
+      ),
+    );
+  }
+}
+
+/// Asks where the attachment should come from.
+class _AttachmentSheet extends StatelessWidget {
+  const _AttachmentSheet();
+
+  static const _options = <({
+    IconData icon,
+    String label,
+    String hint,
+    AttachmentSource source,
+  })>[
+    (
+      icon: Icons.photo_camera_outlined,
+      label: 'Ambil foto',
+      hint: 'Potret dokumen langsung dari kamera',
+      source: AttachmentSource.camera,
+    ),
+    (
+      icon: Icons.photo_library_outlined,
+      label: 'Pilih dari galeri',
+      hint: 'Gambar yang sudah tersimpan di perangkat',
+      source: AttachmentSource.gallery,
+    ),
+    (
+      icon: Icons.folder_outlined,
+      label: 'Pilih berkas',
+      hint: 'PDF, teks, CSV, atau gambar',
+      source: AttachmentSource.file,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          for (final option in _options)
+            ListTile(
+              onTap: () => Navigator.of(context).pop(option.source),
+              leading: Icon(
+                option.icon,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+              title: Text(
+                option.label,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+              ),
+              subtitle: Text(
+                option.hint,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
       ),
     );
   }
