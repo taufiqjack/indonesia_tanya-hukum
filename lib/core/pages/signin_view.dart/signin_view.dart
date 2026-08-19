@@ -78,23 +78,28 @@ class _Brand extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 76,
-            height: 76,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: Colors.white.withValues(alpha: 0.08),
-              border: Border.all(color: const Color(0x26FFFFFF)),
-            ),
-            child: Icon(
-              Icons.balance_rounded,
-              size: 36,
-              color: Colors.white.withValues(alpha: 0.9),
+          ConstrainedBox(
+            constraints: const BoxConstraints(minWidth: 40, minHeight: 40),
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: Colors.white.withValues(alpha: 0.08),
+                border: Border.all(color: const Color(0x26FFFFFF)),
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+
+                child: Image.asset(
+                  'assets/images/icon_th_tr.png',
+                  height: 76,
+                  width: 76,
+                ),
+              ),
             ),
           ),
           const SizedBox(height: 26),
           const Text(
-            'Hukum AI',
+            'Tanya Hukum',
             style: TextStyle(
               color: Colors.white,
               fontSize: 30,
