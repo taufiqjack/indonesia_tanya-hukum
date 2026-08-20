@@ -1,3 +1,9 @@
+import com.android.build.OutputFile
+import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+import com.android.build.gradle.internal.tasks.FinalizeBundleTask
+import java.text.SimpleDateFormat
+import java.util.Date
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
@@ -32,6 +38,40 @@ android {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
+}
+
+// Name the artifacts TanyaHukum-v<version>_<date>[_<abi>]_<variant>.apk / .aab
+val buildDate: String = SimpleDateFormat("ddMMyyyy").format(Date())
+val buildDirectory = layout.buildDirectory
+
+android.applicationVariants.all {
+    val variantName = name
+    val variantVersionName = versionName
+    val variantVersionCode = versionCode
+
+    outputs.all {
+        val output = this as BaseVariantOutputImpl
+        val abi = output.getFilter(OutputFile.ABI)
+        output.outputFileName = if (abi != null) {
+            "TanyaHukum-v${variantVersionName}_${buildDate}_${abi}_$variantName.apk"
+        } else {
+            "TanyaHukum-v${variantVersionName}_${buildDate}_$variantName.apk"
+        }
+    }
+
+    // FinalizeBundleTask has no value for finalBundleFile while it is being created,
+    // so set the destination outright rather than deriving it from the current value.
+    val bundleTaskName = "sign${variantName.replaceFirstChar { it.uppercase() }}Bundle"
+    tasks.withType(FinalizeBundleTask::class.java)
+        .matching { it.name == bundleTaskName }
+        .configureEach {
+            finalBundleFile.set(
+                buildDirectory.file(
+                    "outputs/bundle/$variantName/" +
+                        "TanyaHukum-$variantName-v$variantVersionName+$variantVersionCode-$buildDate.aab",
+                ),
+            )
+        }
 }
 
 kotlin {

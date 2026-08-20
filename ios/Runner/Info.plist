@@ -28,6 +28,20 @@
 	<string>????</string>
 	<key>CFBundleVersion</key>
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
+	<!-- Google Sign-In: skema callback OAuth. Nilainya adalah GOOGLE_IOS_CLIENT_ID
+	     yang dibalik, mis. client id 123-abc.apps.googleusercontent.com menjadi
+	     com.googleusercontent.apps.123-abc. -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>com.googleusercontent.apps.GANTI-DENGAN-IOS-CLIENT-ID</string>
+			</array>
+		</dict>
+	</array>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>UIApplicationSceneManifest</key>

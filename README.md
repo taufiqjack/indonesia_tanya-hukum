@@ -97,9 +97,25 @@ Sign-in needs OAuth clients of your own — without them every attempt fails wit
    GOOGLE_SERVER_CLIENT_ID=1234567890-abcdef.apps.googleusercontent.com
    ```
 
-4. iOS only: create an **iOS** OAuth client, set `GOOGLE_IOS_CLIENT_ID` in
-   `.env`, and add its reversed client id as a URL scheme in
-   `ios/Runner/Info.plist`.
+4. iOS only: create an **iOS** OAuth client for the bundle id
+   `com.jetorbit.indonesiaLaw`. It takes two edits, and the simulator fails
+   just as a device does if either is missing:
+
+   ```dotenv
+   GOOGLE_IOS_CLIENT_ID=1234567890-ios.apps.googleusercontent.com
+   ```
+
+   Then replace the placeholder scheme in `ios/Runner/Info.plist` with the same
+   id *reversed* — the domain part first, without `.apps.googleusercontent.com`:
+
+   ```xml
+   <string>com.googleusercontent.apps.1234567890-ios</string>
+   ```
+
+   The URL scheme is what brings the OAuth callback back into the app, so it is
+   required even though the client id is passed from `.env` rather than a
+   `GoogleService-Info.plist`. `.env` is read by Dart at runtime; `Info.plist`
+   is read by the OS at launch, which is why the value is written twice.
 
 Dropping `android/app/google-services.json` into the project works as well; in
 that case `GOOGLE_SERVER_CLIENT_ID` can stay empty, as long as the file contains

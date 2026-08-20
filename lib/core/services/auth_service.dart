@@ -53,6 +53,7 @@ class GoogleAuthService implements AuthService {
 
   @override
   Future<AppUser?> signIn() async {
+    _assertConfigured();
     await initialize();
 
     if (!_google.supportsAuthenticate()) {
@@ -93,6 +94,42 @@ class GoogleAuthService implements AuthService {
     }
   }
 
+  /// Stops early when the client id this platform reads is missing.
+  ///
+  /// Neither platform ships a `GoogleService-Info.plist` or a
+  /// `google-services.json`, so every client id comes from `.env`. Left unset,
+  /// the SDK reports the gap as a generic failure that reads like a network
+  /// blip and sends people looking in the wrong place.
+  void _assertConfigured() {
+    if (kIsWeb) {
+      if (Env.googleServerClientId == null) {
+        throw const AuthException(
+          'GOOGLE_SERVER_CLIENT_ID belum diisi di berkas .env, jadi masuk '
+          'dengan Google belum bisa dipakai di web.',
+        );
+      }
+      return;
+    }
+
+    switch (defaultTargetPlatform) {
+      case TargetPlatform.iOS || TargetPlatform.macOS
+          when Env.googleIosClientId == null:
+        throw const AuthException(
+          'GOOGLE_IOS_CLIENT_ID belum diisi di berkas .env. Buat OAuth client '
+          'bertipe iOS untuk bundle id com.jetorbit.indonesiaLaw di Google '
+          'Cloud Console, isikan ke .env, lalu daftarkan skema URL '
+          'kebalikannya di ios/Runner/Info.plist.',
+        );
+      case TargetPlatform.android when Env.googleServerClientId == null:
+        throw const AuthException(
+          'GOOGLE_SERVER_CLIENT_ID belum diisi di berkas .env, jadi masuk '
+          'dengan Google belum bisa dipakai di Android.',
+        );
+      default:
+        return;
+    }
+  }
+
   AppUser _toUser(GoogleSignInAccount account) => AppUser(
     id: account.id,
     email: account.email,
@@ -103,10 +140,8 @@ class GoogleAuthService implements AuthService {
   String _describe(GoogleSignInException error) {
     return switch (error.code) {
       GoogleSignInExceptionCode.clientConfigurationError ||
-      GoogleSignInExceptionCode
-          .providerConfigurationError => 'Konfigurasi Google Sign-In belum '
-          'lengkap. Periksa GOOGLE_SERVER_CLIENT_ID di berkas .env dan sidik '
-          'jari SHA-1 aplikasi.',
+      GoogleSignInExceptionCode.providerConfigurationError =>
+        _configurationHint(),
       GoogleSignInExceptionCode.uiUnavailable =>
         'Layanan Google tidak tersedia di perangkat ini.',
       GoogleSignInExceptionCode.interrupted =>
@@ -126,6 +161,25 @@ class GoogleAuthService implements AuthService {
             'Setelan perangkat, lalu pastikan OAuth client Android (package '
             'name + SHA-1) sudah terdaftar di Google Cloud Console.',
       _ => 'Gagal masuk dengan Google. Coba lagi.',
+    };
+  }
+
+  /// What is worth checking differs per platform, so the text names only the
+  /// pieces the running platform actually reads.
+  String _configurationHint() {
+    const prefix = 'Konfigurasi Google Sign-In belum lengkap. Periksa ';
+    if (kIsWeb) {
+      return '${prefix}GOOGLE_SERVER_CLIENT_ID di berkas .env dan daftar '
+          'origin yang diizinkan pada OAuth client web.';
+    }
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.iOS || TargetPlatform.macOS =>
+        '${prefix}GOOGLE_IOS_CLIENT_ID di berkas .env dan skema URL '
+            'com.googleusercontent.apps.<client id dibalik> di '
+            'ios/Runner/Info.plist.',
+      _ =>
+        '${prefix}GOOGLE_SERVER_CLIENT_ID di berkas .env dan sidik jari SHA-1 '
+            'aplikasi.',
     };
   }
 }
