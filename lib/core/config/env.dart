@@ -8,12 +8,35 @@ abstract final class Env {
 
   static Future<void> load() => dotenv.load(fileName: _fileName);
 
+  /// Reading a value before [load] has run — or after it failed — throws
+  /// inside dotenv, so every getter below goes through here and treats a
+  /// missing file as an unset value.
+  static String? _read(String key) =>
+      dotenv.isInitialized ? dotenv.maybeGet(key) : null;
+
+  /// Base URL of the app's own backend, e.g. `https://rag.ipanel.id/`. Empty
+  /// when `.env` is missing or `DOMAIN` is not set.
+  static String get domain => _read('DOMAIN')?.trim() ?? '';
+
+  static bool get hasDomain => domain.isNotEmpty;
+
+  /// Joins [path] onto [domain], tolerating a trailing slash on one side and a
+  /// leading slash on the other so the endpoint constants can be written
+  /// either way.
+  static Uri apiUri(String path) {
+    final base = domain.endsWith('/')
+        ? domain.substring(0, domain.length - 1)
+        : domain;
+    final suffix = path.startsWith('/') ? path : '/$path';
+    return Uri.parse('$base$suffix');
+  }
+
   /// Gemini API key. Empty when `.env` is missing or the key is not set.
-  static String get geminiApiKey => dotenv.maybeGet('GEMINI_API_KEY') ?? '';
+  static String get geminiApiKey => _read('GEMINI_API_KEY') ?? '';
 
   /// Gemini model id, e.g. `gemini-3.5-flash`.
   static String get geminiModel =>
-      dotenv.maybeGet('GEMINI_MODEL') ?? 'gemini-3.5-flash';
+      _read('GEMINI_MODEL') ?? 'gemini-3.5-flash';
 
   static bool get hasGeminiKey => geminiApiKey.trim().isNotEmpty;
 
@@ -27,7 +50,7 @@ abstract final class Env {
   static String? get googleIosClientId => _nullable('GOOGLE_IOS_CLIENT_ID');
 
   static String? _nullable(String key) {
-  final value = dotenv.maybeGet(key)?.trim();
+    final value = _read(key)?.trim();
     return value == null || value.isEmpty ? null : value;
   }
 }

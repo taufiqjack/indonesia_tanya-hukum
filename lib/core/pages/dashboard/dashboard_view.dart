@@ -8,6 +8,7 @@ import 'package:indonesia_law/core/pages/dashboard/history_drawer.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
 import 'package:indonesia_law/core/services/attachment_picker.dart';
 import 'package:indonesia_law/core/widgets/attachment_tile.dart';
+import 'package:indonesia_law/core/widgets/citation_list.dart';
 import 'package:indonesia_law/core/widgets/common_handle_back.dart';
 import 'package:indonesia_law/core/widgets/rich_answer_text.dart';
 import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
@@ -35,7 +36,11 @@ class _DashboardViewState extends State<DashboardView> {
   /// them inline, so a handful is already a large upload.
   static const _maxAttachments = 4;
 
-  final ChatController _chat = ChatController();
+  /// Built from the session's token, so an account on the app's own backend
+  /// chats there while a Google one falls back to Gemini.
+  late final ChatController _chat = ChatController(
+    accessToken: widget.auth.user?.accessToken,
+  );
   final AttachmentPicker _picker = AttachmentPicker();
   final TextEditingController _promptController = TextEditingController();
   final FocusNode _promptFocusNode = FocusNode();
@@ -44,6 +49,10 @@ class _DashboardViewState extends State<DashboardView> {
 
   /// Picked but not yet sent.
   final List<ChatAttachment> _pending = <ChatAttachment>[];
+
+  /// Index of the question being rewritten, or null for a fresh one. Sending
+  /// while this is set replaces that turn instead of appending a new one.
+  int? _editingIndex;
 
   @override
   void initState() {
@@ -68,10 +77,86 @@ class _DashboardViewState extends State<DashboardView> {
     if (prompt.trim().isEmpty && _pending.isEmpty) return;
 
     final attachments = List<ChatAttachment>.of(_pending);
+    final editing = _editingIndex;
     _promptController.clear();
     _promptFocusNode.unfocus();
-    setState(_pending.clear);
+    setState(() {
+      _pending.clear();
+      _editingIndex = null;
+    });
+
+    if (editing != null) {
+      _chat.editQuestion(editing, prompt, attachments: attachments);
+      return;
+    }
     _chat.send(prompt, attachments: attachments);
+  }
+
+  /// Opens the actions for one question: rewrite it or drop it.
+  Future<void> _questionActions(int index) async {
+    _promptFocusNode.unfocus();
+    final action = await showModalBottomSheet<_QuestionAction>(
+      context: context,
+      backgroundColor: _surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) => const _QuestionSheet(),
+    );
+    if (action == null || !mounted) return;
+
+    switch (action) {
+      case _QuestionAction.edit:
+        _startEditQuestion(index);
+      case _QuestionAction.copy:
+        await _copyQuestion(index);
+    }
+  }
+
+  /// Moves a question back into the composer so it can be rewritten. Its
+  /// attachments come along and stay removable.
+  void _startEditQuestion(int index) {
+    final messages = _chat.messages;
+    if (index < 0 || index >= messages.length) return;
+
+    final question = messages[index];
+    _promptController.text = question.text;
+    _promptController.selection = TextSelection.collapsed(
+      offset: _promptController.text.length,
+    );
+    setState(() {
+      _editingIndex = index;
+      _pending
+        ..clear()
+        ..addAll(question.attachments);
+    });
+    _promptFocusNode.requestFocus();
+  }
+
+  /// Leaves the question as it was and empties the composer.
+  void _cancelEdit() {
+    _promptController.clear();
+    _promptFocusNode.unfocus();
+    setState(() {
+      _editingIndex = null;
+      _pending.clear();
+    });
+  }
+
+  /// Puts one question on the clipboard.
+  Future<void> _copyQuestion(int index) async {
+    final messages = _chat.messages;
+    if (index < 0 || index >= messages.length) return;
+
+    final text = messages[index].text.trim();
+    if (text.isEmpty) {
+      // An attachment-only question has no text worth copying.
+      _notify('Pertanyaan ini hanya berisi lampiran.');
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: text));
+    _notify('Pertanyaan disalin');
   }
 
   /// Asks where the file comes from, then adds it to the composer.
@@ -110,10 +195,7 @@ class _DashboardViewState extends State<DashboardView> {
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(seconds: 3),
-        ),
+        SnackBar(content: Text(message), duration: const Duration(seconds: 3)),
       );
   }
 
@@ -136,7 +218,10 @@ class _DashboardViewState extends State<DashboardView> {
   Future<void> _newChat() async {
     _promptController.clear();
     _promptFocusNode.unfocus();
-    setState(_pending.clear);
+    setState(() {
+      _pending.clear();
+      _editingIndex = null;
+    });
     await _chat.startNewChat();
   }
 
@@ -144,7 +229,10 @@ class _DashboardViewState extends State<DashboardView> {
     _scaffoldKey.currentState?.closeDrawer();
     _promptController.clear();
     _promptFocusNode.unfocus();
-    setState(_pending.clear);
+    setState(() {
+      _pending.clear();
+      _editingIndex = null;
+    });
     await _chat.openSession(session);
     _scrollToBottom();
   }
@@ -258,9 +346,15 @@ class _DashboardViewState extends State<DashboardView> {
                             messages: _chat.messages,
                             controller: _scrollController,
                             onRetry: _chat.retryLast,
+                            editingIndex: _editingIndex,
+                            // Rewriting mid-answer would fight the stream, so
+                            // the actions wait for the reply to land.
+                            onQuestionActions: _chat.isSending
+                                ? null
+                                : _questionActions,
                           ),
                   ),
-                  if (isEmpty) _SuggestionCards(onTap: _submit),
+                  // if (isEmpty) _SuggestionCards(onTap: _submit),
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
                     child: _PromptComposer(
@@ -274,6 +368,8 @@ class _DashboardViewState extends State<DashboardView> {
                       attachments: _pending,
                       onAttach: _attach,
                       onRemoveAttachment: _removeAttachment,
+                      isEditing: _editingIndex != null,
+                      onCancelEdit: _cancelEdit,
                     ),
                   ),
                 ],
@@ -392,11 +488,21 @@ class _Transcript extends StatelessWidget {
     required this.messages,
     required this.controller,
     required this.onRetry,
+    this.editingIndex,
+    this.onQuestionActions,
   });
 
   final List<ChatMessage> messages;
   final ScrollController controller;
   final VoidCallback onRetry;
+
+  /// Question currently sitting in the composer, highlighted so it is clear
+  /// which turn is about to be replaced.
+  final int? editingIndex;
+
+  /// Opens the edit/delete sheet for the question at the given index. Null
+  /// while an answer is still streaming.
+  final void Function(int index)? onQuestionActions;
 
   @override
   Widget build(BuildContext context) {
@@ -408,9 +514,14 @@ class _Transcript extends StatelessWidget {
       itemBuilder: (context, index) {
         final message = messages[index];
         final isLast = index == messages.length - 1;
+        final onActions = onQuestionActions;
         return _MessageBubble(
           message: message,
           onRetry: message.isError && isLast ? onRetry : null,
+          isEditing: index == editingIndex,
+          onActions: message.isUser && onActions != null
+              ? () => onActions(index)
+              : null,
         );
       },
     );
@@ -418,10 +529,21 @@ class _Transcript extends StatelessWidget {
 }
 
 class _MessageBubble extends StatelessWidget {
-  const _MessageBubble({required this.message, this.onRetry});
+  const _MessageBubble({
+    required this.message,
+    this.onRetry,
+    this.onActions,
+    this.isEditing = false,
+  });
 
   final ChatMessage message;
   final VoidCallback? onRetry;
+
+  /// Opens the edit/delete sheet. Only set on questions.
+  final VoidCallback? onActions;
+
+  /// True while this question is the one loaded into the composer.
+  final bool isEditing;
 
   @override
   Widget build(BuildContext context) {
@@ -432,34 +554,42 @@ class _MessageBubble extends StatelessWidget {
           constraints: BoxConstraints(
             maxWidth: MediaQuery.sizeOf(context).width * 0.8,
           ),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1C),
-              borderRadius: const BorderRadius.only(
-                topLeft: Radius.circular(20),
-                topRight: Radius.circular(20),
-                bottomLeft: Radius.circular(20),
-                bottomRight: Radius.circular(6),
+          // Long press is the familiar chat gesture for acting on a message.
+          child: GestureDetector(
+            onLongPress: onActions,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF1C1C1C),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                  bottomLeft: Radius.circular(20),
+                  bottomRight: Radius.circular(6),
+                ),
+                border: Border.all(
+                  color: isEditing
+                      ? Colors.white.withValues(alpha: 0.45)
+                      : const Color(0x1AFFFFFF),
+                ),
               ),
-              border: Border.all(color: const Color(0x1AFFFFFF)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (message.hasAttachments)
-                  _SentAttachments(attachments: message.attachments),
-                if (message.text.trim().isNotEmpty)
-                  Text(
-                    message.text,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 15,
-                      height: 1.45,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (message.hasAttachments)
+                    _SentAttachments(attachments: message.attachments),
+                  if (message.text.trim().isNotEmpty)
+                    Text(
+                      message.text,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 15,
+                        height: 1.45,
+                      ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -505,6 +635,8 @@ class _MessageBubble extends StatelessWidget {
                       ? const Color(0xFFFF8A8A)
                       : Colors.white.withValues(alpha: 0.92),
                 ),
+              if (!message.isStreaming && message.hasCitations)
+                CitationList(citations: message.citations),
               if (!message.isStreaming && !message.isError)
                 _AnswerActions(text: message.text),
               if (onRetry != null)
@@ -760,6 +892,8 @@ class _PromptComposer extends StatelessWidget {
     required this.attachments,
     required this.onAttach,
     required this.onRemoveAttachment,
+    this.isEditing = false,
+    required this.onCancelEdit,
   });
 
   final TextEditingController controller;
@@ -775,6 +909,10 @@ class _PromptComposer extends StatelessWidget {
   final VoidCallback onAttach;
   final ValueChanged<ChatAttachment> onRemoveAttachment;
 
+  /// True while the text field holds a question already asked.
+  final bool isEditing;
+  final VoidCallback onCancelEdit;
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -782,10 +920,13 @@ class _PromptComposer extends StatelessWidget {
       decoration: BoxDecoration(
         color: surface,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: border),
+        border: Border.all(
+          color: isEditing ? Colors.white.withValues(alpha: 0.35) : border,
+        ),
       ),
       child: Column(
         children: [
+          if (isEditing) _EditingBanner(onCancel: onCancelEdit),
           if (attachments.isNotEmpty)
             _PendingAttachments(
               attachments: attachments,
@@ -803,7 +944,9 @@ class _PromptComposer extends StatelessWidget {
               isDense: true,
               border: InputBorder.none,
               contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              hintText: 'Ketik pertanyaan Anda di sini...',
+              hintText: isEditing
+                  ? 'Perbaiki pertanyaan Anda...'
+                  : 'Ketik pertanyaan Anda di sini...',
               hintStyle: TextStyle(
                 color: Colors.white.withValues(alpha: 0.4),
                 fontSize: 15,
@@ -819,15 +962,7 @@ class _PromptComposer extends StatelessWidget {
                 onTap: onAttach,
               ),
               const SizedBox(width: 8),
-              const _CircleButton(
-                icon: Icons.lightbulb_outline_rounded,
-                tooltip: 'Mode berpikir',
-              ),
-              const SizedBox(width: 8),
-              const _CircleButton(
-                icon: Icons.auto_fix_high_outlined,
-                tooltip: 'Sempurnakan prompt',
-              ),
+
               const Spacer(),
               const _CircleButton(
                 icon: Icons.mic_none_rounded,
@@ -880,9 +1015,55 @@ class _CircleButton extends StatelessWidget {
   }
 }
 
+/// Strip on top of the composer telling the user the next send rewrites a
+/// question instead of adding one.
+class _EditingBanner extends StatelessWidget {
+  const _EditingBanner({required this.onCancel});
+
+  final VoidCallback onCancel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 8, bottom: 2),
+      child: Row(
+        children: [
+          Icon(
+            Icons.edit_outlined,
+            size: 15,
+            color: Colors.white.withValues(alpha: 0.65),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Mengubah pertanyaan — jawaban setelahnya akan diganti',
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.65),
+                fontSize: 12.5,
+              ),
+            ),
+          ),
+          IconButton(
+            onPressed: onCancel,
+            tooltip: 'Batal ubah',
+            icon: const Icon(Icons.close_rounded, size: 16),
+            color: Colors.white.withValues(alpha: 0.55),
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints.tightFor(width: 28, height: 28),
+            visualDensity: VisualDensity.compact,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 /// Row of thumbnails sitting above the text field, one per picked file.
 class _PendingAttachments extends StatelessWidget {
-  const _PendingAttachments({required this.attachments, required this.onRemove});
+  const _PendingAttachments({
+    required this.attachments,
+    required this.onRemove,
+  });
 
   final List<ChatAttachment> attachments;
   final ValueChanged<ChatAttachment> onRemove;
@@ -912,35 +1093,95 @@ class _PendingAttachments extends StatelessWidget {
   }
 }
 
+/// What the question sheet can do to a turn already sent.
+enum _QuestionAction { edit, copy }
+
+/// Actions for one question, opened by long-pressing its bubble.
+class _QuestionSheet extends StatelessWidget {
+  const _QuestionSheet();
+
+  static const _options =
+      <({IconData icon, String label, String hint, _QuestionAction action})>[
+        (
+          icon: Icons.edit_outlined,
+          label: 'Ubah pertanyaan',
+          hint: 'Perbaiki teksnya lalu tanyakan ulang',
+          action: _QuestionAction.edit,
+        ),
+        (
+          icon: Icons.copy,
+          label: 'Salin pertanyaan',
+          hint: 'Teks pertanyaan disalin ke papan klip',
+          action: _QuestionAction.copy,
+        ),
+      ];
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.symmetric(vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.2),
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          for (final option in _options)
+            ListTile(
+              onTap: () => Navigator.of(context).pop(option.action),
+              leading: Icon(
+                option.icon,
+                color: Colors.white.withValues(alpha: 0.85),
+              ),
+              title: Text(
+                option.label,
+                style: const TextStyle(color: Colors.white, fontSize: 15),
+              ),
+              subtitle: Text(
+                option.hint,
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.45),
+                  fontSize: 12.5,
+                ),
+              ),
+            ),
+          const SizedBox(height: 8),
+        ],
+      ),
+    );
+  }
+}
+
 /// Asks where the attachment should come from.
 class _AttachmentSheet extends StatelessWidget {
   const _AttachmentSheet();
 
-  static const _options = <({
-    IconData icon,
-    String label,
-    String hint,
-    AttachmentSource source,
-  })>[
-    (
-      icon: Icons.photo_camera_outlined,
-      label: 'Ambil foto',
-      hint: 'Potret dokumen langsung dari kamera',
-      source: AttachmentSource.camera,
-    ),
-    (
-      icon: Icons.photo_library_outlined,
-      label: 'Pilih dari galeri',
-      hint: 'Gambar yang sudah tersimpan di perangkat',
-      source: AttachmentSource.gallery,
-    ),
-    (
-      icon: Icons.folder_outlined,
-      label: 'Pilih berkas',
-      hint: 'PDF, teks, CSV, atau gambar',
-      source: AttachmentSource.file,
-    ),
-  ];
+  static const _options =
+      <({IconData icon, String label, String hint, AttachmentSource source})>[
+        (
+          icon: Icons.photo_camera_outlined,
+          label: 'Ambil foto',
+          hint: 'Potret dokumen langsung dari kamera',
+          source: AttachmentSource.camera,
+        ),
+        (
+          icon: Icons.photo_library_outlined,
+          label: 'Pilih dari galeri',
+          hint: 'Gambar yang sudah tersimpan di perangkat',
+          source: AttachmentSource.gallery,
+        ),
+        (
+          icon: Icons.folder_outlined,
+          label: 'Pilih berkas',
+          hint: 'PDF, teks, CSV, atau gambar',
+          source: AttachmentSource.file,
+        ),
+      ];
 
   @override
   Widget build(BuildContext context) {

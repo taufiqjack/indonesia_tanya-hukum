@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:indonesia_law/core/pages/dashboard/dashboard_view.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/signin_view.dart';
+import 'package:indonesia_law/core/widgets/auth_form.dart';
 import 'package:indonesia_law/core/widgets/spotlight_backdrop.dart';
 
 /// Decides what the app opens on: the chat for a signed-in account, the
@@ -37,7 +38,7 @@ class _Splash extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: SigninView.background,
+      backgroundColor: AuthPalette.background,
       body: Stack(
         children: [
           const Positioned.fill(child: SpotlightBackdrop()),

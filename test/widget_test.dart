@@ -9,7 +9,7 @@ import 'package:indonesia_law/core/models/app_user.dart';
 import 'package:indonesia_law/core/pages/dashboard/chat_controller.dart';
 import 'package:indonesia_law/core/pages/dashboard/dashboard_view.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
-import 'package:indonesia_law/core/pages/signin_view.dart/signin_view.dart';
+import 'package:indonesia_law/core/pages/signin_view.dart/signin_google_view.dart';
 import 'package:indonesia_law/core/services/auth_service.dart';
 import 'package:indonesia_law/core/services/gemini_service.dart';
 import 'package:indonesia_law/core/services/session_store.dart';
@@ -75,7 +75,7 @@ void main() {
     );
     addTearDown(auth.dispose);
 
-    await tester.pumpWidget(MaterialApp(home: SigninView(auth: auth)));
+    await tester.pumpWidget(MaterialApp(home: SigninGoogleView(auth: auth)));
     expect(find.text('Masuk dengan Google'), findsOneWidget);
 
     await tester.tap(find.text('Masuk dengan Google'));
@@ -89,7 +89,7 @@ void main() {
     final auth = AuthController(service: FakeAuthService());
     addTearDown(auth.dispose);
 
-    await tester.pumpWidget(MaterialApp(home: SigninView(auth: auth)));
+    await tester.pumpWidget(MaterialApp(home: SigninGoogleView(auth: auth)));
     await tester.tap(find.text('Masuk dengan Google'));
     await tester.pumpAndSettle();
 
@@ -144,19 +144,22 @@ void main() {
     expect(third.isSignedIn, isFalse);
   });
 
-  test('restoring never touches Google, so no account sheet can appear', () async {
-    // The saved account is the whole answer; asking the SDK anything on launch
-    // is what put a bottom sheet over the chat.
-    final service = FakeAuthService(session: _user);
-    final auth = AuthController(service: service, store: LocalSessionStore());
-    addTearDown(auth.dispose);
+  test(
+    'restoring never touches Google, so no account sheet can appear',
+    () async {
+      // The saved account is the whole answer; asking the SDK anything on launch
+      // is what put a bottom sheet over the chat.
+      final service = FakeAuthService(session: _user);
+      final auth = AuthController(service: service, store: LocalSessionStore());
+      addTearDown(auth.dispose);
 
-    await auth.restore();
+      await auth.restore();
 
-    expect(service.signInCalled, isFalse);
-    expect(auth.isSignedIn, isFalse);
-    expect(auth.isRestoring, isFalse);
-  });
+      expect(service.signInCalled, isFalse);
+      expect(auth.isSignedIn, isFalse);
+      expect(auth.isRestoring, isFalse);
+    },
+  );
 
   testWidgets('typing a question and sending it shows both bubbles', (
     tester,

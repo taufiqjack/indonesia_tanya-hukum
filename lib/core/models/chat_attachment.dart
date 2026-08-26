@@ -78,6 +78,22 @@ class ChatAttachment {
     'size': size,
   };
 
+
+  /// Reads an attachment as the backend lists it: a label, its type and size.
+  /// The payload itself is never sent back, so [bytes] stays null.
+  factory ChatAttachment.fromApi(Map<String, Object?> json) {
+    final size = json['size'];
+    return ChatAttachment(
+      name: json['filename'] is String
+          ? json['filename'] as String
+          : 'Lampiran',
+      mimeType: json['content_type'] is String
+          ? json['content_type'] as String
+          : 'application/octet-stream',
+      size: size is int ? size : 0,
+    );
+  }
+
   factory ChatAttachment.fromJson(Map<String, Object?> json) {
     return ChatAttachment(
       name: json['name'] is String ? json['name'] as String : 'Lampiran',
