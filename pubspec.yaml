@@ -1,13 +1,12 @@
 name: indonesia_law
 description: "Tanya Hukum"
 
-publish_to: 'none' # Remove this line if you wish to publish to pub.dev
+publish_to: "none" # Remove this line if you wish to publish to pub.dev
 
 version: 1.0.0+1
 
 environment:
   sdk: ^3.12.2
-
 
 dependencies:
   flutter:
@@ -22,10 +21,17 @@ dependencies:
   shared_preferences: ^2.5.5
   google_sign_in: ^7.2.0
   image_picker: ^1.2.3
-  file_picker: ^12.0.0
+  file_picker: ^11.0.3
   path: ^1.9.1
   flutter_launcher_icons: ^0.14.4
   webview_flutter: ^4.14.1
+  alice: ^1.0.0
+
+# `file_picker` is held at 11.x on purpose: 12.x pulls `windows_file_picker`,
+# which needs `win32 ^6`, while `alice` pulls `share_plus`/`package_info_plus`,
+# which are still on `win32 ^5`. Forcing either side breaks the build even on
+# mobile — those packages reach their Windows FFI code through
+# `if (dart.library.ffi)` imports, and `dart:ffi` exists on Android and iOS.
 
 flutter_launcher_icons:
   android: true
@@ -36,16 +42,11 @@ dev_dependencies:
   flutter_test:
     sdk: flutter
 
-
   flutter_lints: ^6.0.0
 
-
 flutter:
-
   uses-material-design: true
 
   assets:
     - .env
     - assets/images/
-
-

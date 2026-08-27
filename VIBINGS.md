@@ -18,3 +18,5 @@
 14. change endpoint for chat message using chatSessions for get sessionId, then get message chatMessages in constants.dart
 
 15. show citations (rujukan pasal below it) for response message and click to webview https://rag.ipanel.id/article/{id}
+
+16. pls implement alice packages for consume api log for this project

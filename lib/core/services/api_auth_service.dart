@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:indonesia_law/core/config/env.dart';
 import 'package:indonesia_law/core/consts/constants.dart';
 import 'package:indonesia_law/core/models/app_user.dart';
+import 'package:indonesia_law/core/services/api_logger.dart';
 import 'package:indonesia_law/core/services/api_response.dart';
 import 'package:indonesia_law/core/services/auth_service.dart';
 
@@ -16,7 +17,8 @@ import 'package:indonesia_law/core/services/auth_service.dart';
 /// backend already writes in Indonesian, so failures are shown as they come
 /// back instead of being flattened into one generic line.
 class ApiAuthService {
-  ApiAuthService({http.Client? client}) : _client = client ?? http.Client();
+  ApiAuthService({http.Client? client})
+    : _client = client ?? ApiLogger.instance.wrap(http.Client());
 
   static const _timeout = Duration(seconds: 30);
 

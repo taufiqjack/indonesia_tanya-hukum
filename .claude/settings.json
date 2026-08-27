@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s \"https://pub.dev/api/packages/alice\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d['latest']['version']\\);print\\(json.dumps\\(d['latest']['pubspec'].get\\('environment'\\),indent=1\\)\\);print\\(json.dumps\\(d['latest']['pubspec'].get\\('dependencies'\\),indent=1\\)\\)\")",
+      "Bash(curl -s \"https://pub.dev/api/packages/alice_http\")",
+      "Bash(python3 -c \"import sys,json;d=json.load\\(sys.stdin\\);print\\(d['latest']['version']\\);print\\(json.dumps\\(d['latest']['pubspec'],indent=1\\)\\)\")",
+      "Bash(curl -sL \"https://raw.githubusercontent.com/jhomlala/alice/master/packages/alice_http/README.md\" -o alice_http_readme.md)"
+    ]
+  }
+}

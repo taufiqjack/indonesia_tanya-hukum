@@ -66,22 +66,24 @@ class AttachmentPicker {
   }
 
   Future<ChatAttachment?> _pickFile() async {
-    final PlatformFile? file;
+    final FilePickerResult? result;
     try {
-      file = await FilePicker.pickFile(
+      result = await FilePicker.pickFiles(
         dialogTitle: 'Pilih berkas',
         type: FileType.custom,
         allowedExtensions: ChatAttachment.supportedExtensions,
+        // The bytes are needed inline for the Gemini request, and reading them
+        // here means the pick fails loudly rather than at send time.
+        withData: true,
       );
     } on Object catch (error) {
       throw AttachmentException(_pickerMessage(error, null));
     }
-    if (file == null) return null;
+    if (result == null || result.files.isEmpty) return null;
 
-    final Uint8List bytes;
-    try {
-      bytes = await file.readAsBytes();
-    } on Object {
+    final file = result.files.first;
+    final bytes = file.bytes;
+    if (bytes == null) {
       throw const AttachmentException(
         'Berkas tidak dapat dibaca. Coba pilih berkas lain.',
       );

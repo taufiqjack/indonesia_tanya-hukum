@@ -8,6 +8,7 @@ import 'package:indonesia_law/core/consts/constants.dart';
 import 'package:indonesia_law/core/models/chat_attachment.dart';
 import 'package:indonesia_law/core/models/chat_message.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
+import 'package:indonesia_law/core/services/api_logger.dart';
 import 'package:indonesia_law/core/services/api_response.dart';
 
 /// Raised when the chat backend cannot answer; carries a message meant to be
@@ -33,7 +34,7 @@ class ChatApiException implements Exception {
 /// read the same way — a list of rows, then one row's transcript.
 class ChatApiService {
   ChatApiService({required this.accessToken, http.Client? client})
-    : _client = client ?? http.Client();
+    : _client = client ?? ApiLogger.instance.wrap(http.Client());
 
   /// Answers come from a retrieval pass plus a model, so they are slow by
   /// nature; anything shorter cuts off replies that were on their way.
@@ -251,3 +252,4 @@ class ChatApiService {
     }
   }
 }
+

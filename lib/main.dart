@@ -3,9 +3,13 @@ import 'package:fluttertoast/fluttertoast.dart';
 import 'package:indonesia_law/core/config/env.dart';
 import 'package:indonesia_law/core/pages/auth_gate.dart';
 import 'package:indonesia_law/core/pages/signin_view.dart/auth_controller.dart';
+import 'package:indonesia_law/core/services/api_logger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // Started before anything can make a request, so the first call is caught
+  // too. No-op in release builds.
+  ApiLogger.instance.start();
   try {
     await Env.load();
   } on Object catch (error) {
@@ -46,6 +50,8 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       title: 'Hukum AI',
       debugShowCheckedModeBanner: false,
+      // The API inspector pushes itself onto this navigator; null in release.
+      navigatorKey: ApiLogger.instance.navigatorKey,
       theme: ThemeData(
         brightness: Brightness.dark,
         colorScheme: ColorScheme.fromSeed(

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:indonesia_law/core/models/app_user.dart';
 import 'package:indonesia_law/core/models/chat_session.dart';
+import 'package:indonesia_law/core/services/api_logger.dart';
 
 /// Side panel listing the saved conversations, with the signed-in account at
 /// the bottom.
@@ -55,6 +56,7 @@ class HistoryDrawer extends StatelessWidget {
               child: _NewChatButton(onTap: onNewChat),
             ),
             Expanded(child: _body()),
+            if (ApiLogger.isEnabled) const _ApiLogTile(),
             if (user != null) _AccountTile(user: user!, onSignOut: onSignOut),
           ],
         ),
@@ -171,6 +173,48 @@ class _NewChatButton extends StatelessWidget {
 }
 
 /// Signed-in account, pinned to the bottom of the drawer.
+/// Way into the API inspector. Only built in debug builds, where the logger
+/// actually captures anything.
+class _ApiLogTile extends StatelessWidget {
+  const _ApiLogTile();
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: const BoxDecoration(
+        border: Border(top: BorderSide(color: HistoryDrawer._border)),
+      ),
+      child: ListTile(
+        onTap: () {
+          Navigator.of(context).pop();
+          ApiLogger.instance.showInspector();
+        },
+        dense: true,
+        leading: Icon(
+          Icons.bug_report_outlined,
+          size: 20,
+          color: Colors.white.withValues(alpha: 0.7),
+        ),
+        title: Text(
+          'Log API',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.7),
+            fontSize: 13.5,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        subtitle: Text(
+          'Hanya tampil di mode debug',
+          style: TextStyle(
+            color: Colors.white.withValues(alpha: 0.35),
+            fontSize: 11.5,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _AccountTile extends StatelessWidget {
   const _AccountTile({required this.user, required this.onSignOut});
 

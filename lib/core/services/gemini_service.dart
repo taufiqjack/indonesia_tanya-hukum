@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:indonesia_law/core/config/env.dart';
 import 'package:indonesia_law/core/models/chat_attachment.dart';
 import 'package:indonesia_law/core/models/chat_message.dart';
+import 'package:indonesia_law/core/services/api_logger.dart';
 
 /// Raised when the Gemini API cannot answer; carries a message meant to be
 /// shown to the user as-is.
@@ -22,7 +23,8 @@ class GeminiException implements Exception {
 /// Streaming is used (`streamGenerateContent` + SSE) so answers appear word by
 /// word instead of after a long pause.
 class GeminiService {
-  GeminiService({http.Client? client}) : _client = client ?? http.Client();
+  GeminiService({http.Client? client})
+    : _client = client ?? ApiLogger.instance.wrap(http.Client());
 
   static const _host = 'generativelanguage.googleapis.com';
   static const _basePath = '/v1beta/models';
